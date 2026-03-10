@@ -87,6 +87,17 @@ sbatch benchmarks/03_training_baselines/run.sh
 
 ## Advanced Benchmark Results (2026-03-10)
 
+### FlashAttention vs Math SDPA (single GPU, FP16)
+| Sequence Length | Flash (ms) | Math (ms) | Flash TFLOPS | Speedup |
+|----------------|-----------|-----------|-------------|---------|
+| 512 | 0.080 | 2.151 | 107.7 | **27x** |
+| 1K | 0.192 | 6.906 | 178.6 | **36x** |
+| 2K | 0.463 | 27.72 | 296.6 | **60x** |
+| 4K | 0.862 | 55.56 | 318.9 | **64x** |
+| 8K | 1.669 | 114.7 | **329.5** | **69x** |
+
+FlashAttention achieves **329 TFLOPS** at 8K seq len (vs 4.8 TFLOPS for math backend). Memory usage is constant (~0.18 GB) regardless of sequence length -- math backend uses 20 GB at 8K.
+
 ### CUDA Graphs (Inference Speedup)
 | Config | No Graph (ms) | CUDA Graph (ms) | Speedup |
 |--------|--------------|-----------------|---------|

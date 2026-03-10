@@ -1,0 +1,37 @@
+SDPA / FlashAttention Benchmark
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+Flash SDPA enabled: True
+MemEfficient SDPA: True
+
+Config                    Backend           Avg (ms)   Min (ms)     TFLOPS   Mem (GB)
+-------------------------------------------------------------------------------------
+Small seq (512)           flash                0.080      0.070     107.74       0.04
+Small seq (512)           mem_efficient        0.116      0.113      73.99       0.04
+Small seq (512)           math                 2.151      2.146       3.99       0.41
+
+Medium seq (1K)           flash                0.192      0.184     178.61       0.09
+Medium seq (1K)           mem_efficient        0.347      0.338      98.91       0.09
+Medium seq (1K)           math                 6.906      6.901       4.98       1.42
+
+Long seq (2K)             flash                0.463      0.457     296.55       0.18
+Long seq (2K)             mem_efficient        0.927      0.919     148.25       0.18
+Long seq (2K)             math                27.719     27.708       4.96       5.26
+
+Very long seq (4K)        flash                0.862      0.843     318.91       0.18
+Very long seq (4K)        mem_efficient        1.781      1.730     154.37       0.18
+Very long seq (4K)        math                55.558     55.517       4.95      10.14
+
+Ultra seq (8K)            flash                1.669      1.633     329.45       0.18
+Ultra seq (8K)            mem_efficient        3.492      3.434     157.43       0.18
+Ultra seq (8K)            math               114.670    114.646       4.79      20.01
+
+Large head_dim (128)      flash                0.790      0.765     347.76       0.35
+Large head_dim (128)      mem_efficient        1.458      1.422     188.56       0.34
+Large head_dim (128)      math                31.721     31.711       8.67       5.66
+
+BF16 (2K)                 flash                0.462      0.453     297.27       0.28
+BF16 (2K)                 mem_efficient        0.920      0.904     149.44       0.18
+BF16 (2K)                 math                27.711     27.703       4.96       5.26
+
+Benchmark complete.
