@@ -1,0 +1,19 @@
+Liger-Kernel Fused Ops Benchmark
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+Liger-Kernel: installed
+
+Operation                        PyTorch (ms)     Liger (ms)    Speedup     PT Mem     LG Mem
+-----------------------------------------------------------------------------------------------
+RMSNorm (fwd+bwd)                       2.606          0.611       4.27x       0.54       0.34
+CrossEntropy (fwd+bwd)                  4.020          2.578       1.56x       2.76       2.23
+FusedLinearCE (fwd+bwd)                27.673           FAIL -- CUDA error: an illegal memory access was
+
+============================================================
+End-to-end training step (218M param transformer)
+Config                              tok/s   Mem (GB)
+-------------------------------------------------------
+Standard PyTorch                     FAIL -- CUDA error: an illegal memory access was encounter
++ Liger-Kernel                       FAIL -- CUDA error: an illegal memory access was encounter
+
+Benchmark complete.

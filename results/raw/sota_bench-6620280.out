@@ -1,0 +1,337 @@
+=== SOTA GPU Optimization Benchmarks ===
+Date: Tue Mar 10 06:53:24 PM EDT 2026
+Node: x1001c1s7b0n1
+Job ID: 6620280
+
+==========================================
+TEST 1: FlexAttention vs SDPA
+==========================================
+FlexAttention vs SDPA Benchmark
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+
+Config          Method                      Avg (ms)     TFLOPS   Mem (GB)
+---------------------------------------------------------------------------
+seq=512         SDPA Flash                     0.073      117.8       0.03
+seq=512         FlexAttn causal                0.131       65.6       0.33 (0.56x)
+seq=512         FlexAttn slide-256             0.119       71.9       0.33
+seq=512         FlexAttn soft-cap              0.166       51.8       0.33
+
+seq=1K          SDPA Flash                     0.192      179.0       0.07
+seq=1K          FlexAttn causal                0.237      145.1       1.26 (0.81x)
+seq=1K          FlexAttn slide-256             0.180      191.3       1.26
+seq=1K          FlexAttn soft-cap              0.564       61.0       1.26
+
+seq=2K          SDPA Flash                     0.594      231.5       0.14
+seq=2K          FlexAttn causal                0.655      209.8       4.94 (0.91x)
+seq=2K          FlexAttn slide-256             0.275      500.5       4.94
+seq=2K          FlexAttn soft-cap              1.269      108.3       4.94
+
+seq=4K          SDPA Flash                     0.862      319.0       0.14
+seq=4K          FlexAttn causal                1.329      206.8       9.78 (0.65x)
+seq=4K          FlexAttn slide-256             0.348      790.9       9.78
+seq=4K          FlexAttn soft-cap              2.537      108.3       9.78
+
+seq=8K          SDPA Flash                     1.668      329.6       0.14
+seq=8K          FlexAttn causal                2.550      215.6      19.50 (0.65x)
+seq=8K          FlexAttn slide-256             0.348     1581.2      19.50
+seq=8K          FlexAttn soft-cap              5.183      106.1      19.50
+
+Benchmark complete.
+
+==========================================
+TEST 2: torch.compile Regional vs Whole
+==========================================
+torch.compile Benchmark
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+
+Building eager model...
+Compiling whole model (default)...
+Compiling regional (per-layer)...
+Compiling reduce-overhead...
+
+============================================================
+TRAINING: batch=8, seq=512, BF16
+Mode                             tok/s   Mem (GB)
+--------------------------------------------------
+Eager                           87,747       4.89
+compile(default)                98,112       5.09
+compile(regional)               97,930       5.09
+compile(reduce-OH)              98,936       5.07
+
+============================================================
+INFERENCE: batch=1, seq=128, BF16
+Mode                             tok/s   Latency (ms)   Mem (GB)
+-----------------------------------------------------------------
+Eager                           51,763           2.47       2.60
+compile(default)                47,991           2.67       1.78
+compile(regional)               43,130           2.97       1.75
+compile(reduce-OH)              46,364           2.76       2.70
+
+Benchmark complete.
+
+==========================================
+TEST 3: Liger-Kernel Fused Ops
+==========================================
+Liger-Kernel Fused Ops Benchmark
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+TEST 3 FAILED
+
+==========================================
+TEST 4: GaLore Optimizer
+==========================================
+GaLore Optimizer Benchmark
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+
+Model: ~218M params (d=1024, L=12)
+Optimizer                           tok/s   Mem (GB)       Loss
+-----------------------------------------------------------------
+AdamW (standard)                   79,608       4.31     8.6074
+AdamW8bit (bnb)                    65,503       3.90     8.6041
+GaLore AdamW                         FAIL -- 'update_proj_gap'
+GaLore AdamW8bit                     FAIL -- 'update_proj_gap'
+Adafactor                          58,996       4.31     8.7717
+
+Benchmark complete.
+
+==========================================
+TEST 5: N-gram Speculative Decoding
+==========================================
+N-gram Speculative Decoding Benchmark
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+
+Model: 219M params
+
+Prompt length: 256, Generate: 128 tokens
+Method                                Time (s)      tok/s    Speedup  Accept Rate
+----------------------------------------------------------------------------------
+Greedy (standard)                        0.526      243.5      1.00x          N/A
+N-gram(n=2, k=3)                         0.257      498.5      2.05x       54.5%
+N-gram(n=2, k=5)                         0.242      529.8      2.18x       47.1%
+N-gram(n=3, k=3)                         0.284      450.4      1.85x       46.8%
+N-gram(n=3, k=5)                         0.294      435.6      1.79x       37.2%
+N-gram(n=4, k=3)                         0.304      421.0      1.73x       44.0%
+N-gram(n=4, k=5)                         0.284      451.3      1.85x       36.0%
+
+============================================================
+With repetitive prompt (better n-gram matches):
+Greedy (standard)                        0.371      344.7      1.00x
+N-gram(n=3, k=5, repetitive)             0.303      422.8      1.23x       23.3%
+N-gram(n=4, k=5, repetitive)             0.295      434.2      1.26x       26.6%
+
+Benchmark complete.
+
+==========================================
+TEST 6: QLoRA vs Full BF16
+==========================================
+QLoRA vs Full BF16 Training Benchmark
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+
+Config                                   tok/s   Mem (GB)   Trainable Params
+------------------------------------------------------------------------------
+Full BF16                               19,746       9.52        936,804,352
+INT8 + LoRA (r=16)                      10,306       8.44          5,242,880
+NF4 QLoRA                                 FAIL -- self and mat2 must have the same dtype, but got BF
+Full BF16 + AdamW8bit                   17,076       7.98        936,804,352
+
+Benchmark complete.
+
+==========================================
+TEST 7: NCCL Tuning (default)
+==========================================
+NCCL Tuning Benchmark
+World size: 4
+NCCL_ALGO=default, NCCL_PROTO=default
+CUDA_DEVICE_MAX_CONNECTIONS=default
+PyTorch: 2.8.0+cu126
+
+Size         AlgBW (GB/s)   BusBW (GB/s)   Latency (us)
+--------------------------------------------------------
+NCCL version 2.27.3+cuda12.9
+0.001 MB             0.01           0.02           70.2
+0.010 MB             0.02           0.03          483.8
+0.100 MB             0.21           0.32          493.6
+1 MB                 1.91           2.87          548.7
+4 MB                 8.96          13.43          468.4
+16 MB               82.69         124.03          202.9
+64 MB              110.38         165.57          608.0
+256 MB             129.41         194.11         2074.3
+
+Benchmark complete.
+
+-- NCCL Ring + LL128 --
+NCCL Tuning Benchmark
+World size: 4
+NCCL_ALGO=Ring, NCCL_PROTO=LL128
+CUDA_DEVICE_MAX_CONNECTIONS=default
+PyTorch: 2.8.0+cu126
+
+Size         AlgBW (GB/s)   BusBW (GB/s)   Latency (us)
+--------------------------------------------------------
+NCCL version 2.27.3+cuda12.9
+0.001 MB             0.01           0.02           73.3
+0.010 MB             0.21           0.32           49.9
+0.100 MB             1.58           2.37           66.3
+1 MB                20.88          31.32           50.2
+4 MB                 6.83          10.24          614.2
+16 MB               46.02          69.02          364.6
+64 MB               69.60         104.40          964.2
+256 MB             100.73         151.09         2665.0
+
+Benchmark complete.
+
+-- NCCL Tree + LL128 --
+NCCL Tuning Benchmark
+World size: 4
+NCCL_ALGO=Tree, NCCL_PROTO=LL128
+CUDA_DEVICE_MAX_CONNECTIONS=default
+PyTorch: 2.8.0+cu126
+
+Size         AlgBW (GB/s)   BusBW (GB/s)   Latency (us)
+--------------------------------------------------------
+NCCL version 2.27.3+cuda12.9
+0.001 MB             0.00           0.00          319.8
+0.010 MB             0.23           0.34           46.0
+0.100 MB             0.33           0.49          319.3
+1 MB                 3.47           5.21          301.9
+4 MB                 7.41          11.11          566.4
+16 MB               37.59          56.39          446.3
+64 MB               63.88          95.82         1050.6
+256 MB              81.72         122.58         3284.8
+
+Benchmark complete.
+
+-- NCCL Ring + Simple --
+NCCL Tuning Benchmark
+World size: 4
+NCCL_ALGO=Ring, NCCL_PROTO=Simple
+CUDA_DEVICE_MAX_CONNECTIONS=default
+PyTorch: 2.8.0+cu126
+
+Size         AlgBW (GB/s)   BusBW (GB/s)   Latency (us)
+--------------------------------------------------------
+NCCL version 2.27.3+cuda12.9
+0.001 MB             0.00           0.00          594.6
+0.010 MB             0.02           0.03          526.1
+0.100 MB             0.35           0.53          296.7
+1 MB                12.77          19.15           82.1
+4 MB                45.55          68.32           92.1
+16 MB               73.40         110.11          228.6
+64 MB               92.67         139.01          724.2
+256 MB             125.07         187.60         2146.4
+
+Benchmark complete.
+
+==========================================
+TEST 8: Communication-Computation Overlap
+==========================================
+Communication-Computation Overlap Benchmark
+World size: 4
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+CUDA_DEVICE_MAX_CONNECTIONS: default
+
+Part 1: Raw AllReduce + Compute Overlap
+Comm Size     Sync (ms) Async (ms)   Overlap Gain
+--------------------------------------------------
+NCCL version 2.27.3+cuda12.9
+1MB+50mm           2.89       2.77          1.04x
+1MB+200mm         11.78      11.37          1.04x
+16MB+50mm          3.04       2.53          1.20x
+16MB+200mm        10.10      10.09          1.00x
+64MB+50mm          3.06       2.53          1.21x
+64MB+200mm        10.04      10.52          0.95x
+256MB+50mm         4.08       3.30          1.24x
+256MB+200mm       10.56      10.34          1.02x
+
+Part 2: FSDP Training Throughput
+Config                                   tok/s   Mem (GB)
+------------------------------------------------------------
+FSDP+BF16 (MAX_CONN=default)            45,873       4.10
+
+Benchmark complete.
+
+-- With CUDA_DEVICE_MAX_CONNECTIONS=1 --
+Communication-Computation Overlap Benchmark
+World size: 4
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+CUDA_DEVICE_MAX_CONNECTIONS: 1
+
+Part 1: Raw AllReduce + Compute Overlap
+Comm Size     Sync (ms) Async (ms)   Overlap Gain
+--------------------------------------------------
+NCCL version 2.27.3+cuda12.9
+1MB+50mm           3.55       3.12          1.14x
+1MB+200mm         12.50      11.46          1.09x
+16MB+50mm          2.73       3.33          0.82x
+16MB+200mm        10.49       9.93          1.06x
+64MB+50mm          3.20       3.25          0.99x
+64MB+200mm         9.86      10.12          0.97x
+256MB+50mm         3.78       3.70          1.02x
+256MB+200mm        9.73       9.76          1.00x
+
+Part 2: FSDP Training Throughput
+Config                                   tok/s   Mem (GB)
+------------------------------------------------------------
+FSDP+BF16 (MAX_CONN=1)                  49,280       4.10
+
+Benchmark complete.
+
+==========================================
+TEST 9: Optimizer Memory (FSDP)
+==========================================
+Optimizer Memory Benchmark (FSDP + BF16)
+World size: 4
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+
+bitsandbytes 0.49.1 loaded
+galore-torch loaded
+
+Model: ~1.3B params (d=2048, L=24, ff=8192)
+Optimizer                      tok/s   Mem/GPU (GB)   Final Loss
+-----------------------------------------------------------------
+NCCL version 2.27.3+cuda12.9
+AdamW (standard)               9,121          12.21       8.9205
+AdamW8bit (bnb)                9,366          13.41       8.9113
+Adafactor                      8,777          14.75       8.9562
+GaLore-8bit                     FAIL -- 'update_proj_gap'
+
+Benchmark complete.
+
+==========================================
+TEST 10: Context Parallelism
+==========================================
+Context Parallelism Benchmark
+World size: 4
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+
+torch.nn.attention.context_parallel not available
+Testing standard distributed attention only
+Seq Len    Method                      Avg (ms)   Mem/GPU (GB)
+-----------------------------------------------------------------
+2048       Standard SDPA                   0.19           0.03
+2048       Sharded SDPA (seq/{world_size})       0.04           0.03
+
+NCCL version 2.27.3+cuda12.9
+4096       Standard SDPA                   1.59           0.07
+4096       Sharded SDPA (seq/{world_size})       0.07           0.05
+
+8192       Standard SDPA                   2.68           0.14
+8192       Sharded SDPA (seq/{world_size})       0.15           0.10
+
+16384      Standard SDPA                   6.20           0.27
+16384      Sharded SDPA (seq/{world_size})       0.48           0.20
+
+
+Benchmark complete.
+
+=== ALL SOTA BENCHMARKS COMPLETE ===
+Date: Tue Mar 10 07:04:57 PM EDT 2026

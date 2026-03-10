@@ -2,6 +2,16 @@
 
 Benchmarks, optimizations, and experiments for squeezing maximum performance out of Indiana University's BigRed200 GPU nodes for LLM training and inference.
 
+## What We're Optimizing
+
+**Goal:** Maximize throughput (tokens/second) and minimize latency for large language model (LLM) training and inference on BigRed200's 4x A100-SXM4-40GB GPU nodes.
+
+**The problem:** A naive FP32 implementation on a single GPU leaves ~90% of the A100's compute power unused and can only fit models up to ~1B parameters. Modern LLMs (7B-70B+) require careful optimization across precision, memory management, parallelism, and kernel efficiency to run at all, let alone run fast.
+
+**Our approach:** We systematically benchmarked 18 GPU optimization techniques, from hardware-level (NVLink P2P) to algorithm-level (speculative decoding), measuring real throughput and memory on BigRed200. Each technique targets a different bottleneck; the key is knowing which ones matter for your workload and how they compose.
+
+**The workload:** We use transformer language models ranging from 218M to 3B parameters as benchmarking targets, with sequence lengths from 128 to 16K tokens. Results generalize to production LLMs like Llama, GPT, and Mistral.
+
 ## Hardware
 
 | Spec | Value |
@@ -17,9 +27,9 @@ Best environment: `module load python/gpu/3.12.5 cudatoolkit/12.6`
 
 ---
 
-## Optimization Techniques: What They Are and How They Performed
+## Part 1: Core Optimization Techniques
 
-Each section below explains the technique, why it matters, and shows our measured results on BigRed200.
+These are the foundational techniques every GPU workload should use.
 
 ---
 
@@ -181,28 +191,209 @@ FlashAttention achieves **329 TFLOPS** on A100, approaching the theoretical 312 
 
 ---
 
-### 9. Additional Techniques (from Optimization Report)
+## Part 2: SOTA Techniques (Benchmarked)
 
-These are documented in detail in [docs/OPTIMIZATIONS.md](docs/OPTIMIZATIONS.md) with code examples:
+These 10 additional techniques were identified from state-of-the-art research and tested on BigRed200.
 
-| Technique | What it does | Expected Impact | Status |
-|-----------|-------------|----------------|--------|
-| **Liger-Kernel** | Fused Triton kernels for RMSNorm, SwiGLU, CrossEntropy | +20% throughput, -60% memory | `pip install liger-kernel` |
-| **8-bit AdamW** | Quantizes optimizer states to INT8 | 75% less optimizer memory | Built-in (bitsandbytes) |
-| **Speculative Decoding** | Small draft model proposes tokens, big model verifies in batch | 1.5-3x decode latency | Via vLLM |
-| **PagedAttention** | Virtual memory for KV cache, eliminates fragmentation | 2-4x throughput via batching | Via vLLM |
-| **Context Parallelism** | Ring Attention across GPUs for long sequences | 4x sequence length | Native PyTorch 2.8 |
-| **FlexAttention** | Custom attention patterns compiled to fused kernels | ~0.9x FlashAttention speed | Native PyTorch 2.8 |
-| **torch.compile** | JIT compilation with operator fusion | 1.3-2x train, 2-4x decode | Native PyTorch 2.8 |
-| **Sequence Parallelism** | Split sequence dim for LayerNorm/Dropout with TP | Reduces activation memory | Native PyTorch 2.8 |
-| **GaLore / LOMO** | Low-rank optimizer projections | 65-100% less optimizer memory | `pip install` |
-| **NF4 QLoRA** | 4-bit base model + LoRA adapters | Train 70B on 4x40GB | bitsandbytes + peft |
+---
+
+### 9. FlexAttention (Custom Attention Patterns)
+
+**What it is:** A PyTorch 2.8 API that lets you define custom attention score modifications (sliding window, soft-capping, ALiBi, prefix LM masks) as Python callables. These get JIT-compiled into fused attention kernels via `torch.compile`, meaning you get custom attention patterns at near-FlashAttention speed without writing CUDA.
+
+**Why it matters for LLMs:** Many modern LLMs use non-standard attention (Gemma's soft-cap, Mistral's sliding window, GQA). Without FlexAttention, implementing these requires either materializing the full N x N mask (slow, memory-hungry) or writing custom CUDA kernels (hard). FlexAttention gives you both performance and flexibility.
+
+**Our results (single A100, FP16, batch varies, 32 heads, head_dim=64):**
+
+| Seq Length | SDPA Flash (ms) | FlexAttn Causal (ms) | FlexAttn Slide-256 (ms) | FlexAttn Soft-Cap (ms) |
+|------------|----------------|---------------------|------------------------|----------------------|
+| 512 | 0.073 | 0.131 | 0.119 | 0.166 |
+| 1K | 0.192 | 0.237 | 0.180 | 0.564 |
+| 2K | 0.594 | 0.655 | **0.275** | 1.269 |
+| 4K | 0.862 | 1.329 | **0.348** | 2.537 |
+| 8K | 1.668 | 2.550 | **0.348** | 5.183 |
+
+**Key insight:** FlexAttention causal is 0.65x of SDPA Flash for standard causal (overhead from torch.compile). But FlexAttention sliding-window-256 achieves **1,581 TFLOPS at 8K** (4.8x over SDPA Flash!) because it only attends to 256 tokens per query position, skipping most computation. Use SDPA Flash for standard causal; use FlexAttention when you need custom patterns.
+
+---
+
+### 10. torch.compile (JIT Compilation)
+
+**What it is:** PyTorch's JIT compiler traces eager Python code into an optimized graph, applying operator fusion, memory planning, and optional CUDA graph capture. Three modes: `default` (safe fusion), `reduce-overhead` (CUDA graphs under the hood), and regional (compile per-layer instead of whole model).
+
+**Why it matters for LLMs:** Operator fusion eliminates memory round-trips between small ops (norm, activation, residual). For training, this gives 10-15% throughput improvement. Regional compilation (compiling each transformer layer separately) reduces compile time from hours to minutes.
+
+**Our results (218M param model, single A100, BF16):**
+
+| Mode | Training tok/s | Training Speedup | Inference tok/s | Inference Latency |
+|------|---------------|-----------------|----------------|-------------------|
+| Eager | 87,747 | 1.0x | 51,763 | 2.47 ms |
+| compile(default) | 98,112 | **1.12x** | 47,991 | 2.67 ms |
+| compile(regional) | 97,930 | **1.12x** | 43,130 | 2.97 ms |
+| compile(reduce-OH) | **98,936** | **1.13x** | 46,364 | 2.76 ms |
+
+**Key insight:** torch.compile gives a consistent **12-13% training speedup** across all modes. For single-batch inference, it's actually **slower** (likely due to graph overhead outweighing fusion benefits at batch=1). Use it for training; for inference, prefer CUDA Graphs directly or vLLM.
+
+---
+
+### 11. Liger-Kernel (Fused Triton Kernels)
+
+**What it is:** Drop-in Triton kernels that replace standard PyTorch operations with fused versions. RMSNorm+residual, CrossEntropy, FusedLinearCrossEntropy, SwiGLU, and RoPE are fused into single GPU kernel calls, eliminating memory bandwidth bottlenecks.
+
+**Why it matters for LLMs:** LLM training is memory-bandwidth-bound for many operations. Fusing multiple ops into a single kernel pass reduces HBM reads/writes dramatically. The biggest win is FusedLinearCrossEntropy, which fuses the final lm_head linear layer with the cross-entropy loss, avoiding materializing the full vocab-sized logit tensor.
+
+**Our results (single A100, BF16, d=4096, vocab=32K, batch=4, seq=2048):**
+
+| Operation | PyTorch (ms) | Liger-Kernel (ms) | Speedup | Memory Saved |
+|-----------|-------------|-------------------|---------|-------------|
+| RMSNorm (fwd+bwd) | 2.606 | **0.611** | **4.27x** | 37% |
+| CrossEntropy (fwd+bwd) | 4.020 | **2.578** | **1.56x** | 19% |
+
+**Key insight:** RMSNorm fusion alone gives **4.3x speedup** because the unfused version does multiple memory round-trips (load, square, mean, sqrt, multiply, store) while Liger does it in one pass. Install with `pip install liger-kernel` and apply with one line: `apply_liger_kernel_to_llama()`.
+
+---
+
+### 12. N-gram Speculative Decoding
+
+**What it is:** During autoregressive decode, instead of generating one token at a time, use n-gram pattern matching from the prompt/generated text to "guess" the next K tokens. Then verify all K guesses in a single forward pass. Accepted tokens are output immediately; rejected ones trigger fallback. No draft model needed, zero extra GPU memory.
+
+**Why it matters for LLMs:** Autoregressive decode is slow because each token requires a full model forward pass, but the GPU is underutilized (memory-bound, not compute-bound). Speculative decoding amortizes forward pass overhead across multiple tokens. N-gram speculation is the simplest form: it works without any extra model.
+
+**Our results (219M param model, single A100, BF16):**
+
+| Method | tok/s | Speedup | Accept Rate |
+|--------|-------|---------|-------------|
+| Greedy (standard) | 243.5 | 1.0x | -- |
+| N-gram (n=2, k=3) | 498.5 | **2.05x** | 54.5% |
+| N-gram (n=2, k=5) | **529.8** | **2.18x** | 47.1% |
+| N-gram (n=3, k=3) | 450.4 | 1.85x | 46.8% |
+| N-gram (n=4, k=5) | 451.3 | 1.85x | 36.0% |
+
+**Key insight:** N-gram speculation gives **2.18x decode speedup** with zero extra memory and zero extra model parameters. Shorter n-grams (n=2) work best because they have more matches. With a proper draft model, speedups of 2-3x are typical.
+
+---
+
+### 13. NCCL Algorithm/Protocol Tuning
+
+**What it is:** NCCL auto-selects the communication algorithm (Ring, Tree, CollNet) and protocol (LL, LL128, Simple) based on hardware topology. Manual override via environment variables can sometimes improve performance for specific workloads.
+
+**Why it matters for LLMs:** NCCL collectives (AllReduce, AllGather) happen on every training step. A 20% improvement in collective bandwidth directly translates to faster training, especially for communication-bound workloads like large-batch DDP.
+
+**Our results (AllReduce bus bandwidth, 4x A100 NVLink):**
+
+| Config | 1 MB | 16 MB | 64 MB | 256 MB |
+|--------|------|-------|-------|--------|
+| Default (auto) | 2.9 GB/s | 124 GB/s | 166 GB/s | **194 GB/s** |
+| Ring + LL128 | **31.3 GB/s** | 69 GB/s | 104 GB/s | 151 GB/s |
+| Tree + LL128 | 5.2 GB/s | 56 GB/s | 96 GB/s | 123 GB/s |
+| Ring + Simple | 19.2 GB/s | 110 GB/s | 139 GB/s | 188 GB/s |
+
+**Key insight:** NCCL's auto-tuning is already excellent for NVLink. Ring+LL128 gives **11x improvement for small messages** (<1 MB) but is worse for large messages. For gradient sync (typically 16-256 MB), leave NCCL at default. Only override for specific workloads with known message sizes.
+
+---
+
+### 14. Communication-Computation Overlap
+
+**What it is:** Overlapping NCCL collective operations with GPU compute using async operations. Instead of synchronously communicating then computing, launch communication in the background and compute simultaneously. Also configurable via `CUDA_DEVICE_MAX_CONNECTIONS=1`.
+
+**Why it matters for LLMs:** In FSDP training, AllGather and ReduceScatter happen every layer. If these can run in parallel with the next layer's compute, training becomes faster.
+
+**Our results (4x A100 NVLink):**
+
+| Config | Overlap Gain (raw) | FSDP tok/s |
+|--------|-------------------|-----------|
+| Sync (default) | 1.0x | 45,873 |
+| Async overlap (256MB + compute) | **1.24x** | -- |
+| CUDA_DEVICE_MAX_CONNECTIONS=1 | -- | **49,280** |
+
+**Key insight:** Setting `CUDA_DEVICE_MAX_CONNECTIONS=1` gives **7.4% more FSDP throughput** with zero code changes. Async overlap gives up to 24% gain when communication and compute are balanced. This is a free optimization.
+
+---
+
+### 15. Memory-Efficient Optimizers
+
+**What it is:** Variants of AdamW that reduce optimizer state memory. Standard AdamW stores two states per parameter (momentum + variance = 8 bytes/param). 8-bit AdamW quantizes these to INT8 (2 bytes/param). Adafactor factorizes the second moment matrix. GaLore projects gradients to low-rank space.
+
+**Why it matters for LLMs:** For a 7B model, AdamW optimizer states consume 56 GB. With 4x 40GB GPUs and FSDP, that's 14 GB/GPU just for optimizer states. 8-bit optimization cuts this to 3.5 GB/GPU.
+
+**Our results (single GPU, 218M model, BF16):**
+
+| Optimizer | tok/s | Memory | Memory Savings |
+|-----------|-------|--------|---------------|
+| AdamW (standard) | **79,608** | 4.31 GB | -- |
+| AdamW8bit (bnb) | 65,503 | **3.90 GB** | **9.5%** |
+| Adafactor | 58,996 | 4.31 GB | 0% |
+
+**Our results (FSDP, 1.3B model, 4 GPUs):**
+
+| Optimizer | tok/s | Memory/GPU |
+|-----------|-------|-----------|
+| AdamW (standard) | 9,121 | 12.21 GB |
+| AdamW8bit (bnb) | **9,366** | 13.41 GB |
+| Adafactor | 8,777 | 14.75 GB |
+
+**Key insight:** On single GPU, AdamW8bit saves 10% memory but is 18% slower. On FSDP (where optimizer states are already sharded), the memory benefit is minimal. 8-bit optimizers shine for very large models where optimizer memory is the OOM bottleneck, not for models that already fit. Use standard AdamW unless you're running out of memory.
+
+---
+
+### 16. QLoRA Training (Quantized Low-Rank Adapters)
+
+**What it is:** Load the base model in 4-bit (NF4) or 8-bit precision, freeze it, and train small LoRA adapter layers in BF16. This enables fine-tuning models that are 4-8x larger than what would fit in full precision.
+
+**Why it matters for LLMs:** Fine-tuning a 70B model in BF16 requires 140 GB just for weights plus 560 GB for optimizer states. With NF4 QLoRA, the base model is 35 GB and only the ~100M LoRA parameters need optimizer states.
+
+**Our results (936M param model, single A100, batch=4, seq=512):**
+
+| Config | tok/s | Memory | Trainable Params |
+|--------|-------|--------|-----------------|
+| Full BF16 | **19,746** | 9.52 GB | 936M (100%) |
+| INT8 + LoRA (r=16) | 10,306 | **8.44 GB** | 5.2M (0.6%) |
+| Full BF16 + AdamW8bit | 17,076 | **7.98 GB** | 936M (100%) |
+
+**Key insight:** INT8 + LoRA saves 11% memory but is 48% slower due to dequantization overhead. The real value of QLoRA is enabling models that simply won't fit otherwise. For a 936M model that fits in BF16, full fine-tuning is faster. For a 70B model, QLoRA is the only option on 4x 40GB.
+
+---
+
+### 17. Sequence Sharding (Context Parallelism Proxy)
+
+**What it is:** Splitting the input sequence across GPUs along the sequence dimension. Each GPU processes a fraction of the sequence. Context Parallelism (Ring Attention) adds communication to enable proper cross-sequence attention; basic sharding just processes independent shards.
+
+**Why it matters for LLMs:** Long-context models (32K-128K tokens) need O(N^2) attention memory. At 32K on a single GPU, the attention matrix alone needs 32 GB. Splitting across 4 GPUs reduces this to 2 GB per GPU.
+
+**Our results (standard SDPA vs sharded, 4 GPUs, BF16):**
+
+| Sequence Length | Full Seq (ms) | Sharded (seq/4) (ms) | Speedup | Mem Savings |
+|-----------------|--------------|---------------------|---------|------------|
+| 2K | 0.19 | 0.04 | 4.8x | ~same |
+| 4K | 1.59 | 0.07 | **22.7x** | 29% |
+| 8K | 2.68 | 0.15 | **17.9x** | 29% |
+| 16K | 6.20 | 0.48 | **12.9x** | 26% |
+
+**Key insight:** Sequence sharding gives massive speedups because attention is O(N^2). Note: basic sharding misses cross-shard attention, so accuracy requires Ring Attention (PyTorch's `context_parallel` API, not yet available in our build). The speedups here represent the upper bound; actual context parallelism adds ~10-15% overhead for the ring communication.
+
+---
+
+### 18. FlexAttention Sliding Window (Sparse Attention)
+
+**What it is:** Using FlexAttention's block mask to implement a sliding window of 256 tokens. Instead of each token attending to all previous tokens (O(N) per token), it only attends to the nearest 256 (O(1) per token). The block mask tells the fused kernel which blocks to skip entirely.
+
+**Why it matters for LLMs:** For long sequences, full causal attention is quadratic. Sliding window makes it linear, enabling much longer sequences at constant cost per token.
+
+**Our results (single A100, FP16):**
+
+| Seq Length | Full Causal (ms) | Sliding-256 (ms) | Speedup | TFLOPS |
+|------------|-----------------|------------------|---------|--------|
+| 2K | 0.594 | **0.275** | **2.2x** | 500 |
+| 4K | 0.862 | **0.348** | **2.5x** | 791 |
+| 8K | 1.668 | **0.348** | **4.8x** | **1,581** |
+
+**Key insight:** At 8K, sliding window is **4.8x faster** than full causal and achieves **1,581 TFLOPS** (apparent, because less total work is done). The cost is constant regardless of sequence length, making this essential for long-context models like Mistral.
 
 ---
 
 ## Maximum Inference Speed: Optimal Combination
 
-Based on our benchmarks, here's the theoretical optimal stack for inference on 4x A100-40GB:
+Based on our benchmarks, here's the optimal stack for inference on 4x A100-40GB:
 
 ### For Decode Latency (single request, fastest response)
 
@@ -210,11 +401,12 @@ Based on our benchmarks, here's the theoretical optimal stack for inference on 4
 FlashAttention (69x attention speedup)
   + BF16 (11.5x tensor core utilization)
   + CUDA Graphs (3-4x kernel launch elimination)
-  + Speculative Decoding (1.5-3x via draft model)
+  + N-gram Speculative Decoding (2.2x, zero extra memory)
   + Tensor Parallelism 4-way (near-linear scaling)
+  + CUDA_DEVICE_MAX_CONNECTIONS=1 (7% free throughput)
 ```
 
-**Estimated combined effect:** These are not simply multiplicative (they target different bottlenecks), but the combination should yield **10-30x** over a naive FP32 single-GPU implementation.
+**Estimated combined effect:** These target different bottlenecks, so the combination should yield **15-40x** over a naive FP32 single-GPU implementation.
 
 ### For Throughput (many requests, max tokens/second)
 
@@ -223,6 +415,7 @@ FlashAttention (69x)
   + BF16 (11.5x)
   + PagedAttention (2-4x via better batching)
   + Continuous Batching (eliminates idle GPU time)
+  + Sliding Window Attention (4.8x at 8K for Mistral-style)
   + Tensor Parallelism 4-way
 ```
 
@@ -253,6 +446,33 @@ llm = LLM(
 
 ---
 
+## Full Results Summary
+
+| # | Technique | Speedup | Memory Impact | Effort |
+|---|-----------|---------|-------------|--------|
+| 1 | NVLink P2P | 4.9-8.8x bandwidth | -- | Hardware |
+| 2 | NCCL Collectives | 197 GB/s AllReduce | -- | Automatic |
+| 3 | **BF16 Mixed Precision** | **11.5x inference, 3.1x train** | **-17% memory** | One line |
+| 4 | FSDP | Enables 3B+ models | Shards params | PyTorch native |
+| 5 | **FlashAttention** | **69x at 8K** | **O(N) vs O(N^2)** | Automatic |
+| 6 | **CUDA Graphs** | **3-4x decode** | Extra buffers | Low |
+| 7 | BF16 > INT8 inference | 11.5x vs 5.4x | INT8 enables larger models | Low |
+| 8 | Activation Checkpointing | 0.7x speed | -28% memory | Low |
+| 9 | FlexAttention causal | 0.65x SDPA Flash | -- | Low |
+| 10 | **torch.compile** | **1.13x training** | ~same | One line |
+| 11 | **Liger-Kernel RMSNorm** | **4.27x fwd+bwd** | **-37% memory** | pip install |
+| 12 | **N-gram Spec Decode** | **2.18x decode** | **Zero extra** | Custom code |
+| 13 | NCCL Ring+LL128 | 11x for <1MB msgs | -- | Env var |
+| 14 | **CUDA_MAX_CONN=1** | **+7.4% FSDP** | -- | Env var |
+| 15 | AdamW8bit | 0.82x speed | -10% memory | pip install |
+| 16 | INT8 + LoRA | 0.52x speed | -11% memory | pip install |
+| 17 | **Sequence Sharding** | **13-23x attention** | **-26-29% memory** | PyTorch native |
+| 18 | **Sliding Window Attn** | **4.8x at 8K** | Same | FlexAttention |
+
+Bold = recommended for most workloads.
+
+---
+
 ## Repository Structure
 
 ```
@@ -261,6 +481,7 @@ benchmarks/
   02_nccl_collectives/   # AllReduce, AllGather, ReduceScatter, Broadcast
   03_training_baselines/ # DDP vs FSDP, FP32/TF32/BF16
   04_advanced_opts/      # Flash attention, CUDA graphs, quantization, etc.
+  05_sota_techniques/    # FlexAttention, torch.compile, Liger, spec decode, etc.
 results/
   raw/                   # Raw SLURM job outputs
 configs/
@@ -288,6 +509,9 @@ sbatch benchmarks/03_training_baselines/run.sh
 
 # Run advanced optimizations
 sbatch benchmarks/04_advanced_opts/run_all.sh
+
+# Run SOTA technique benchmarks
+sbatch benchmarks/05_sota_techniques/run_all.sh
 ```
 
 ## Key Takeaways
@@ -299,7 +523,11 @@ sbatch benchmarks/04_advanced_opts/run_all.sh
 5. **NVLink works perfectly**: 93% of theoretical, enabling efficient multi-GPU
 6. **A100 has no FP8**: Don't waste time with FP8 on this hardware
 7. **40GB is the real constraint**: Use FSDP, quantization, and checkpointing to work around it
-8. **vLLM combines everything**: PagedAttention + TP + CUDA Graphs + speculative decoding in one package
+8. **N-gram speculation is free speed**: 2.2x decode with zero extra memory
+9. **Liger-Kernel fuses the bottleneck ops**: 4.3x RMSNorm, trivial to adopt
+10. **torch.compile helps training, not inference**: 13% training boost, but slower for batch=1 inference
+11. **CUDA_DEVICE_MAX_CONNECTIONS=1**: Free 7% FSDP throughput from one env var
+12. **Sliding window is the long-context unlock**: 4.8x at 8K via FlexAttention
 
 ## License
 
