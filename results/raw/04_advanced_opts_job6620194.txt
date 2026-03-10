@@ -1,0 +1,188 @@
+=== Advanced GPU Optimization Benchmarks ===
+Date: Tue Mar 10 06:21:25 PM EDT 2026
+Node: x1001c1s7b0n1
+Job ID: 6620194
+
+==========================================
+TEST 1: SDPA / FlashAttention Backends
+==========================================
+SDPA / FlashAttention Benchmark
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+Flash SDPA enabled: True
+MemEfficient SDPA: True
+
+Config                    Backend           Avg (ms)   Min (ms)     TFLOPS   Mem (GB)
+-------------------------------------------------------------------------------------
+Small seq (512)           flash               FAILED -- '_GeneratorContextManager' object has no
+Small seq (512)           mem_efficient       FAILED -- '_GeneratorContextManager' object has no
+Small seq (512)           math                FAILED -- '_GeneratorContextManager' object has no
+
+Medium seq (1K)           flash               FAILED -- '_GeneratorContextManager' object has no
+Medium seq (1K)           mem_efficient       FAILED -- '_GeneratorContextManager' object has no
+Medium seq (1K)           math                FAILED -- '_GeneratorContextManager' object has no
+
+Long seq (2K)             flash               FAILED -- '_GeneratorContextManager' object has no
+Long seq (2K)             mem_efficient       FAILED -- '_GeneratorContextManager' object has no
+Long seq (2K)             math                FAILED -- '_GeneratorContextManager' object has no
+
+Very long seq (4K)        flash               FAILED -- '_GeneratorContextManager' object has no
+Very long seq (4K)        mem_efficient       FAILED -- '_GeneratorContextManager' object has no
+Very long seq (4K)        math                FAILED -- '_GeneratorContextManager' object has no
+
+Ultra seq (8K)            flash               FAILED -- '_GeneratorContextManager' object has no
+Ultra seq (8K)            mem_efficient       FAILED -- '_GeneratorContextManager' object has no
+Ultra seq (8K)            math                FAILED -- '_GeneratorContextManager' object has no
+
+Large head_dim (128)      flash               FAILED -- '_GeneratorContextManager' object has no
+Large head_dim (128)      mem_efficient       FAILED -- '_GeneratorContextManager' object has no
+Large head_dim (128)      math                FAILED -- '_GeneratorContextManager' object has no
+
+BF16 (2K)                 flash               FAILED -- '_GeneratorContextManager' object has no
+BF16 (2K)                 mem_efficient       FAILED -- '_GeneratorContextManager' object has no
+BF16 (2K)                 math                FAILED -- '_GeneratorContextManager' object has no
+
+Benchmark complete.
+
+==========================================
+TEST 2: CUDA Graphs for Inference
+==========================================
+CUDA Graphs Inference Benchmark
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+
+Model params: 216,690,688
+
+Config                               No Graph (ms)  CUDA Graph (ms)  Speedup  tok/s (graph)
+--------------------------------------------------------------------------------------------
+Decode: batch=1, seq=1                       3.236            0.861    3.76x          1,162
+Decode: batch=1, seq=32                      3.572            0.873    4.09x         36,673
+Prefill: batch=1, seq=128                    3.350            0.979    3.42x        130,723
+Prefill: batch=4, seq=128                    3.588            1.578    2.27x        324,379
+Prefill: batch=8, seq=256                    5.003            4.916    1.02x        416,573
+Prefill: batch=16, seq=512                  18.113           17.977    1.01x        455,693
+
+Benchmark complete.
+
+==========================================
+TEST 3: Quantization (FP32/FP16/BF16/INT8)
+==========================================
+Quantization Inference Benchmark
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+
+Loading FP32 model...
+  Params: 936,804,352 (3747 MB)
+Loading FP16 model...
+Loading BF16 model...
+Loading FP16 + TF32 model...
+Loading INT8 model (bitsandbytes 0.49.1)...
+Loading torch.compile + BF16 model...
+
+======================================================================
+Config                    tok/s    ms/step  Peak Mem (GB)  Speedup
+----------------------------------------------------------------------
+FP32                      9,829      208.4           4.03    1.00x
+FP16                    112,046       18.3           4.02   11.40x
+BF16                    113,174       18.1           3.89   11.51x
+FP16+TF32               111,989       18.3           3.89   11.39x
+INT8-bnb                 52,940       38.7           4.50    5.39x
+compile+BF16            112,512       18.2           3.89   11.45x
+======================================================================
+
+Batch=4, Seq=512, Params=936,804,352
+
+==========================================
+TEST 4: Activation Checkpointing
+==========================================
+Activation Checkpointing Benchmark
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+
+
+============================================================
+Model: 218M (24L, d=1024)
+Batch: 4, Seq: 1024
+
+  Checkpoint mode: none
+NCCL version 2.27.3+cuda12.9
+  [FSDP+BF16+ckpt=none]
+    Throughput: 25,657 tok/s | Step: 159.6 ms | Mem: 7.07 GB
+
+  Checkpoint mode: selective
+  [FSDP+BF16+ckpt=selective]
+    Throughput: 17,866 tok/s | Step: 229.3 ms | Mem: 6.09 GB
+
+  Checkpoint mode: full
+  [FSDP+BF16+ckpt=full]
+    Throughput: 13,374 tok/s | Step: 306.3 ms | Mem: 5.11 GB
+
+  Summary for 218M:
+  Mode              tok/s    ms/step   Mem (GB)   Mem Save
+  none             25,657      159.6       7.07       0.0%
+  selective        17,866      229.3       6.09      13.9%
+  full             13,374      306.3       5.11      27.7%
+
+============================================================
+Model: 830M (24L, d=2048)
+Batch: 4, Seq: 1024
+
+  Checkpoint mode: none
+  [FSDP+BF16+ckpt=none]
+    Throughput: 14,933 tok/s | Step: 274.3 ms | Mem: 17.04 GB
+
+  Checkpoint mode: selective
+  [FSDP+BF16+ckpt=selective]
+    Throughput: 13,459 tok/s | Step: 304.3 ms | Mem: 16.49 GB
+
+  Checkpoint mode: full
+  [FSDP+BF16+ckpt=full]
+    Throughput: 12,419 tok/s | Step: 329.8 ms | Mem: 19.17 GB
+
+  Summary for 830M:
+  Mode              tok/s    ms/step   Mem (GB)   Mem Save
+  none             14,933      274.3      17.04       0.0%
+  selective        13,459      304.3      16.49       3.2%
+  full             12,419      329.8      19.17     -12.5%
+
+============================================================
+Benchmark complete.
+
+==========================================
+TEST 5: Tensor Parallelism Scaling
+==========================================
+Tensor Parallelism / FSDP Inference Benchmark
+World size: 4
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+
+
+============================================================
+Model: ~1.3B (d=2048, L=24)
+  Params: 1,339,670,528 (5.36 GB in FP32)
+NCCL version 2.27.3+cuda12.9
+  FSDP (4-GPU) BF16:
+    15,466 tok/s | 33.1 ms/step | 12.06 GB/GPU
+
+============================================================
+Model: ~3B (d=4096, L=16)
+  Params: 2,779,492,352 (11.12 GB in FP32)
+  FSDP (4-GPU) BF16:
+    21,880 tok/s | 23.4 ms/step | 29.04 GB/GPU
+
+============================================================
+Model: ~7B (d=4096, L=32)
+  Params: 5,296,840,704 (21.19 GB in FP32)
+  OOM at ~7B!
+
+============================================================
+Single GPU baselines (rank 0 only):
+  ~1.3B single GPU: 31,836 tok/s | 16.1 ms | 39.05 GB
+  ~3B single GPU: OOM
+  ~7B single GPU: OOM
+
+============================================================
+Benchmark complete.
+
+=== ALL BENCHMARKS COMPLETE ===
+Date: Tue Mar 10 06:27:01 PM EDT 2026

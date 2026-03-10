@@ -30,30 +30,27 @@ def benchmark_sdpa(
     k = torch.randn(batch, heads, seq_len, head_dim, device=device, dtype=dtype)
     v = torch.randn(batch, heads, seq_len, head_dim, device=device, dtype=dtype)
 
-    # Select backend
-    backends = {
-        "flash": torch.backends.cuda.SDPBackend.FLASH_ATTENTION,
-        "mem_efficient": torch.backends.cuda.SDPBackend.EFFICIENT_ATTENTION,
-        "math": torch.backends.cuda.SDPBackend.MATH,
-    }
+    # Select backend - configure via enable/disable flags
+    def set_backend(name):
+        torch.backends.cuda.enable_flash_sdp(name == "flash")
+        torch.backends.cuda.enable_mem_efficient_sdp(name == "mem_efficient")
+        torch.backends.cuda.enable_math_sdp(name == "math")
 
-    ctx = torch.nn.attention.sdpa_kernel(backends[backend])
+    set_backend(backend)
 
     # Warmup
-    with ctx:
-        for _ in range(warmup):
-            _ = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+    for _ in range(warmup):
+        _ = F.scaled_dot_product_attention(q, k, v, is_causal=True)
     torch.cuda.synchronize()
 
     # Benchmark
     start_events = [torch.cuda.Event(enable_timing=True) for _ in range(iters)]
     end_events = [torch.cuda.Event(enable_timing=True) for _ in range(iters)]
 
-    with ctx:
-        for i in range(iters):
-            start_events[i].record()
-            _ = F.scaled_dot_product_attention(q, k, v, is_causal=True)
-            end_events[i].record()
+    for i in range(iters):
+        start_events[i].record()
+        _ = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+        end_events[i].record()
 
     torch.cuda.synchronize()
     times = [s.elapsed_time(e) for s, e in zip(start_events, end_events)]
@@ -64,6 +61,11 @@ def benchmark_sdpa(
     # Calculate FLOPS (2 * batch * heads * seq^2 * head_dim for attn + same for value)
     flops = 4 * batch * heads * seq_len * seq_len * head_dim
     tflops = flops / (avg_ms / 1000) / 1e12
+
+    # Re-enable all backends
+    torch.backends.cuda.enable_flash_sdp(True)
+    torch.backends.cuda.enable_mem_efficient_sdp(True)
+    torch.backends.cuda.enable_math_sdp(True)
 
     mem_gb = torch.cuda.max_memory_allocated() / 1e9
     torch.cuda.reset_peak_memory_stats()
