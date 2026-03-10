@@ -1,0 +1,58 @@
+=== FSDP/DDP Training Benchmark ===
+Date: Tue Mar 10 06:02:25 PM EDT 2026
+Node: x1001c1s7b0n1
+Python: Python 3.12.5
+PyTorch: 2.8.0+cu126
+BF16: True
+
+FSDP/DDP Training Benchmark
+World size: 4
+PyTorch: 2.8.0+cu126
+GPU: NVIDIA A100-SXM4-40GB
+BF16 supported: True
+Batch size: 8, Seq len: 512
+FlashAttention/SDPA: available (PyTorch native)
+TF32 enabled: False
+
+============================================================
+TEST 1: DDP + FP32
+  Model params: 218,787,840
+NCCL version 2.27.3+cuda12.9
+  [DDP-FP32]
+    Throughput: 12,740 tok/s | 24.9 samples/s
+    Step time:  321.5 ms
+    Peak mem:   8.26 GB
+
+============================================================
+TEST 2: DDP + TF32
+  [DDP-TF32]
+    Throughput: 35,875 tok/s | 70.1 samples/s
+    Step time:  114.2 ms
+    Peak mem:   8.25 GB
+
+============================================================
+TEST 3: DDP + BF16 (autocast)
+  [DDP-BF16]
+    Throughput: 38,897 tok/s
+    Step time:  105.3 ms
+    Peak mem:   6.89 GB
+
+============================================================
+TEST 4: FSDP + BF16 mixed precision
+  [FSDP-BF16]
+    Throughput: 52,967 tok/s | 103.5 samples/s
+    Step time:  77.3 ms
+    Peak mem:   5.40 GB
+
+============================================================
+TEST 5: FSDP + BF16 + torch.compile
+  [FSDP-BF16-compiled]
+    Throughput: 39,077 tok/s | 76.3 samples/s
+    Step time:  104.8 ms
+    Peak mem:   5.83 GB
+
+============================================================
+BENCHMARK COMPLETE
+
+=== COMPLETE ===
+Date: Tue Mar 10 06:04:35 PM EDT 2026

@@ -1,0 +1,285 @@
+
+Lmod is automatically replacing "gcc-native/14.2" with "gcc/12.2.0".
+
+
+The following have been reloaded with a version change:
+  1) PrgEnv-gnu/8.6.0 => PrgEnv-gnu/8.3.3
+  2) cray-libsci/25.03.0 => cray-libsci/22.12.1.1
+  3) cray-mpich-ucx/8.1.32 => cray-mpich-ucx/8.1.23
+
+=== GPU TOPOLOGY & P2P BENCHMARK ===
+Date: Tue Mar 10 05:50:50 PM EDT 2026
+Node: x1001c1s7b0n1
+Job ID: 6620088
+
+Modules loaded.
+
+==========================================
+1. NVIDIA-SMI GPU INFO
+==========================================
+Tue Mar 10 17:50:52 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 565.57.01              Driver Version: 565.57.01      CUDA Version: 12.7     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A100-SXM4-40GB          On  |   00000000:03:00.0 Off |                    0 |
+| N/A   35C    P0             51W /  400W |       1MiB /  40960MiB |      0%   E. Process |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+|   1  NVIDIA A100-SXM4-40GB          On  |   00000000:41:00.0 Off |                    0 |
+| N/A   34C    P0             51W /  400W |       1MiB /  40960MiB |      0%   E. Process |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+|   2  NVIDIA A100-SXM4-40GB          On  |   00000000:81:00.0 Off |                    0 |
+| N/A   35C    P0             51W /  311W |       1MiB /  40960MiB |      0%   E. Process |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+|   3  NVIDIA A100-SXM4-40GB          On  |   00000000:C1:00.0 Off |                    0 |
+| N/A   34C    P0             49W /  311W |       1MiB /  40960MiB |      0%   E. Process |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+
+==========================================
+2. GPU TOPOLOGY MATRIX (nvidia-smi topo -m)
+==========================================
+	[4mGPU0	GPU1	GPU2	GPU3	NIC0	NIC1	CPU Affinity	NUMA Affinity	GPU NUMA ID[0m
+GPU0	 X 	NV4	NV4	NV4	NODE	PHB		3		N/A
+GPU1	NV4	 X 	NV4	NV4	NODE	NODE		2		N/A
+GPU2	NV4	NV4	 X 	NV4	NODE	NODE		1		N/A
+GPU3	NV4	NV4	NV4	 X 	PHB	NODE	0,64	0		N/A
+NIC0	NODE	NODE	NODE	PHB	 X 	NODE				
+NIC1	PHB	NODE	NODE	NODE	NODE	 X 				
+
+Legend:
+
+  X    = Self
+  SYS  = Connection traversing PCIe as well as the SMP interconnect between NUMA nodes (e.g., QPI/UPI)
+  NODE = Connection traversing PCIe as well as the interconnect between PCIe Host Bridges within a NUMA node
+  PHB  = Connection traversing PCIe as well as a PCIe Host Bridge (typically the CPU)
+  PXB  = Connection traversing multiple PCIe bridges (without traversing the PCIe Host Bridge)
+  PIX  = Connection traversing at most a single PCIe bridge
+  NV#  = Connection traversing a bonded set of # NVLinks
+
+NIC Legend:
+
+  NIC0: mlx5_0
+  NIC1: mlx5_1
+
+
+==========================================
+3. NVLINK STATUS
+==========================================
+GPU 0: NVIDIA A100-SXM4-40GB (UUID: GPU-77b1cb84-296e-f77f-eb0d-6b646a1bdd10)
+	 Link 0: 25 GB/s
+	 Link 1: 25 GB/s
+	 Link 2: 25 GB/s
+	 Link 3: 25 GB/s
+	 Link 4: 25 GB/s
+	 Link 5: 25 GB/s
+	 Link 6: 25 GB/s
+	 Link 7: 25 GB/s
+	 Link 8: 25 GB/s
+	 Link 9: 25 GB/s
+	 Link 10: 25 GB/s
+	 Link 11: 25 GB/s
+GPU 1: NVIDIA A100-SXM4-40GB (UUID: GPU-c8204a2a-74b2-4a47-1179-e476094a6f4f)
+	 Link 0: 25 GB/s
+	 Link 1: 25 GB/s
+	 Link 2: 25 GB/s
+	 Link 3: 25 GB/s
+	 Link 4: 25 GB/s
+	 Link 5: 25 GB/s
+	 Link 6: 25 GB/s
+	 Link 7: 25 GB/s
+	 Link 8: 25 GB/s
+	 Link 9: 25 GB/s
+	 Link 10: 25 GB/s
+	 Link 11: 25 GB/s
+GPU 2: NVIDIA A100-SXM4-40GB (UUID: GPU-987013fa-acaa-18b1-773c-0aa40f102c29)
+	 Link 0: 25 GB/s
+	 Link 1: 25 GB/s
+	 Link 2: 25 GB/s
+	 Link 3: 25 GB/s
+	 Link 4: 25 GB/s
+	 Link 5: 25 GB/s
+	 Link 6: 25 GB/s
+	 Link 7: 25 GB/s
+	 Link 8: 25 GB/s
+	 Link 9: 25 GB/s
+	 Link 10: 25 GB/s
+	 Link 11: 25 GB/s
+GPU 3: NVIDIA A100-SXM4-40GB (UUID: GPU-f54aa78d-2fd8-9c7e-4593-89dbf6cceb98)
+	 Link 0: 25 GB/s
+	 Link 1: 25 GB/s
+	 Link 2: 25 GB/s
+	 Link 3: 25 GB/s
+	 Link 4: 25 GB/s
+	 Link 5: 25 GB/s
+	 Link 6: 25 GB/s
+	 Link 7: 25 GB/s
+	 Link 8: 25 GB/s
+	 Link 9: 25 GB/s
+	 Link 10: 25 GB/s
+	 Link 11: 25 GB/s
+
+--- GPU 0 NVLink connections ---
+GPU 0: NVIDIA A100-SXM4-40GB (UUID: GPU-77b1cb84-296e-f77f-eb0d-6b646a1bdd10)
+	 Link 0: 25 GB/s
+	 Link 1: 25 GB/s
+	 Link 2: 25 GB/s
+	 Link 3: 25 GB/s
+	 Link 4: 25 GB/s
+	 Link 5: 25 GB/s
+	 Link 6: 25 GB/s
+	 Link 7: 25 GB/s
+	 Link 8: 25 GB/s
+	 Link 9: 25 GB/s
+	 Link 10: 25 GB/s
+	 Link 11: 25 GB/s
+--- GPU 1 NVLink connections ---
+GPU 1: NVIDIA A100-SXM4-40GB (UUID: GPU-c8204a2a-74b2-4a47-1179-e476094a6f4f)
+	 Link 0: 25 GB/s
+	 Link 1: 25 GB/s
+	 Link 2: 25 GB/s
+	 Link 3: 25 GB/s
+	 Link 4: 25 GB/s
+	 Link 5: 25 GB/s
+	 Link 6: 25 GB/s
+	 Link 7: 25 GB/s
+	 Link 8: 25 GB/s
+	 Link 9: 25 GB/s
+	 Link 10: 25 GB/s
+	 Link 11: 25 GB/s
+--- GPU 2 NVLink connections ---
+GPU 2: NVIDIA A100-SXM4-40GB (UUID: GPU-987013fa-acaa-18b1-773c-0aa40f102c29)
+	 Link 0: 25 GB/s
+	 Link 1: 25 GB/s
+	 Link 2: 25 GB/s
+	 Link 3: 25 GB/s
+	 Link 4: 25 GB/s
+	 Link 5: 25 GB/s
+	 Link 6: 25 GB/s
+	 Link 7: 25 GB/s
+	 Link 8: 25 GB/s
+	 Link 9: 25 GB/s
+	 Link 10: 25 GB/s
+	 Link 11: 25 GB/s
+--- GPU 3 NVLink connections ---
+GPU 3: NVIDIA A100-SXM4-40GB (UUID: GPU-f54aa78d-2fd8-9c7e-4593-89dbf6cceb98)
+	 Link 0: 25 GB/s
+	 Link 1: 25 GB/s
+	 Link 2: 25 GB/s
+	 Link 3: 25 GB/s
+	 Link 4: 25 GB/s
+	 Link 5: 25 GB/s
+	 Link 6: 25 GB/s
+	 Link 7: 25 GB/s
+	 Link 8: 25 GB/s
+	 Link 9: 25 GB/s
+	 Link 10: 25 GB/s
+	 Link 11: 25 GB/s
+
+==========================================
+4. BUILDING p2pBandwidthLatencyTest
+==========================================
+Build complete.
+
+==========================================
+5. P2P BANDWIDTH & LATENCY TEST
+==========================================
+[P2P (Peer-to-Peer) GPU Bandwidth Latency Test]
+Device: 0, NVIDIA A100-SXM4-40GB, pciBusID: 3, pciDeviceID: 0, pciDomainID:0
+Device: 1, NVIDIA A100-SXM4-40GB, pciBusID: 41, pciDeviceID: 0, pciDomainID:0
+Device: 2, NVIDIA A100-SXM4-40GB, pciBusID: 81, pciDeviceID: 0, pciDomainID:0
+Device: 3, NVIDIA A100-SXM4-40GB, pciBusID: c1, pciDeviceID: 0, pciDomainID:0
+Device=0 CAN Access Peer Device=1
+Device=0 CAN Access Peer Device=2
+Device=0 CAN Access Peer Device=3
+Device=1 CAN Access Peer Device=0
+Device=1 CAN Access Peer Device=2
+Device=1 CAN Access Peer Device=3
+Device=2 CAN Access Peer Device=0
+Device=2 CAN Access Peer Device=1
+Device=2 CAN Access Peer Device=3
+Device=3 CAN Access Peer Device=0
+Device=3 CAN Access Peer Device=1
+Device=3 CAN Access Peer Device=2
+
+***NOTE: In case a device doesn't have P2P access to other one, it falls back to normal memcopy procedure.
+So you can see lesser Bandwidth (GB/s) and unstable Latency (us) in those cases.
+
+P2P Connectivity Matrix
+     D\D     0     1     2     3
+     0	     1     1     1     1
+     1	     1     1     1     1
+     2	     1     1     1     1
+     3	     1     1     1     1
+Unidirectional P2P=Disabled Bandwidth Matrix (GB/s)
+   D\D     0      1      2      3 
+     0 1336.61  19.12  19.57  19.51 
+     1  19.22 1346.98  19.42  19.81 
+     2  19.55  19.20 1345.82  19.84 
+     3  19.51  19.11  20.12 1349.31 
+Unidirectional P2P=Enabled Bandwidth (P2P Writes) Matrix (GB/s)
+   D\D     0      1      2      3 
+     0 1293.46  93.31  93.51  93.53 
+     1  93.32 1361.06  93.52  93.57 
+     2  93.56  93.53 1364.63  93.25 
+     3  93.52  93.49  93.34 1361.06 
+Bidirectional P2P=Disabled Bandwidth Matrix (GB/s)
+   D\D     0      1      2      3 
+     0 1318.01  21.31  21.23  21.56 
+     1  21.28 1366.42  21.38  21.20 
+     2  21.16  21.35 1368.81  21.44 
+     3  21.42  21.17  21.46 1367.61 
+Bidirectional P2P=Enabled Bandwidth Matrix (GB/s)
+   D\D     0      1      2      3 
+     0 1316.90 185.07 185.26 185.30 
+     1 184.97 1367.02 185.46 185.31 
+     2 185.33 185.33 1369.41 184.89 
+     3 185.11 185.11 184.80 1367.61 
+P2P=Disabled Latency Matrix (us)
+   GPU     0      1      2      3 
+     0   2.21  53.14  12.56  12.89 
+     1  18.30   2.68  16.14  17.81 
+     2  15.66  12.82   2.71  13.52 
+     3  12.47  17.93  17.27   2.46 
+
+   CPU     0      1      2      3 
+     0   2.23   6.35   6.39   6.22 
+     1   6.33   2.16   6.33   6.13 
+     2   6.45   6.20   2.19   6.20 
+     3   6.31   6.12   6.20   2.10 
+P2P=Enabled Latency (P2P Writes) Matrix (us)
+   GPU     0      1      2      3 
+     0   2.13   2.28   2.25   2.28 
+     1   2.18   2.66   2.27   2.24 
+     2   2.25   2.25   2.74   2.25 
+     3   2.16   2.17   2.19   2.47 
+
+   CPU     0      1      2      3 
+     0   2.23   1.86   1.93   1.92 
+     1   1.90   2.19   1.84   1.86 
+     2   1.92   1.88   2.23   1.88 
+     3   1.87   1.84   1.83   2.18 
+
+NOTE: The CUDA Samples are not meant for performance measurements. Results may vary when GPU Boost is enabled.
+
+==========================================
+6. BANDWIDTH TEST (Host <-> Device)
+==========================================
+bandwidthTest sample not found, skipping.
+
+=== BENCHMARK COMPLETE ===
+Date: Tue Mar 10 05:51:05 PM EDT 2026
