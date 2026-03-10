@@ -5,8 +5,8 @@
 #SBATCH -N 1
 #SBATCH --gres=gpu:4
 #SBATCH -t 00:55:00
-#SBATCH -o /N/scratch/atsubhas/sota_bench-%j.out
-#SBATCH -e /N/scratch/atsubhas/sota_bench-%j.err
+#SBATCH -o /N/scratch/$USER/sota_bench-%j.out
+#SBATCH -e /N/scratch/$USER/sota_bench-%j.err
 
 set -euo pipefail
 
@@ -23,7 +23,7 @@ module load python/gpu/3.12.5 2>/dev/null || true
 export NCCL_DEBUG=WARN
 export NCCL_P2P_LEVEL=NVL
 
-BD=/N/scratch/atsubhas/sota_benchmarks
+BD=/N/scratch/$USER/sota_benchmarks
 
 echo ""
 echo "=========================================="
